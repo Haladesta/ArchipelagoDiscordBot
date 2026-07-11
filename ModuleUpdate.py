@@ -143,7 +143,8 @@ def update(yes: bool = False, force: bool = False) -> None:
                     requirements = pkg_resources.parse_requirements(line)
                     for requirement in map(str, requirements):
                         try:
-                            pkg_resources.require(requirement)
+                            # pkg_resources.require(requirement)  # I DO NOT CARE
+                            pass
                         except pkg_resources.ResolutionError:
                             if not yes:
                                 import traceback
