@@ -340,7 +340,9 @@ def main() -> None:
         _ping_mappings.setdefault(slot_name, set()).add(interaction.user.id)
         _save_ping_mappings()
         await interaction.response.send_message(
-            f"✅ You will be pinged for items received by **{slot_name}**.", ephemeral=True
+            f"✅ You will be pinged for items received by **{slot_name}**. "
+            f"Please check the spelling, this does not check if the slot exists.",
+            ephemeral=True
         )
 
     @tree.command(name="unsubscribe", description="Stop being pinged for a slot (or all slots).")
