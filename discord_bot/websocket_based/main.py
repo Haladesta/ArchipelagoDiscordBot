@@ -69,6 +69,16 @@ class UnlockPrinterContext(CommonContext):
         self.auth = slot_name
         self._seen_unlocks: set[tuple[int, int, int, int]] = set()
         self._notify_callback = notify_callback
+        self._connected_event: asyncio.Event = asyncio.Event()
+        self._failure_event: asyncio.Event = asyncio.Event()
+        self._failure_reason: str = ""
+
+    def handle_connection_loss(self, msg: str) -> None:
+        """Override to immediately signal failure to any waiting /connect handler."""
+        super().handle_connection_loss(msg)
+        if not self._connected_event.is_set():
+            self._failure_reason = msg
+            self._failure_event.set()
 
     async def server_auth(self, password_requested: bool = False) -> None:
         if password_requested and not self.password:
@@ -82,6 +92,7 @@ class UnlockPrinterContext(CommonContext):
         if cmd == "Connected" and self.slot is not None:
             self.game = self.slot_info[self.slot].game
             logger.info(f"Connected as {self.auth} (slot {self.slot}, game {self.game})")
+            self._connected_event.set()
 
     def on_print_json(self, args: dict) -> None:
         if args.get("type") != "ItemSend":
@@ -244,7 +255,38 @@ def main() -> None:
         _active_task = asyncio.create_task(_run_connection(ctx), name="ap_connection")
 
         logger.info(f"Connecting to {server} as {slot} (channel {channel.id})")
-        await interaction.followup.send(f"Connecting to `{server}` as `{slot}`\u2026")
+
+        # Wait up to 15 s for a successful login, an explicit failure, or an early exit.
+        _CONNECT_TIMEOUT = 15.0
+        connected_fut = asyncio.ensure_future(ctx._connected_event.wait())
+        failure_fut = asyncio.ensure_future(ctx._failure_event.wait())
+        exit_fut = asyncio.ensure_future(ctx.exit_event.wait())
+        done, pending = await asyncio.wait(
+            {connected_fut, failure_fut, exit_fut},
+            timeout=_CONNECT_TIMEOUT,
+            return_when=asyncio.FIRST_COMPLETED,
+        )
+        for fut in pending:
+            fut.cancel()
+
+        if ctx._connected_event.is_set():
+            await interaction.followup.send(
+                f"✅ Connected to `{server}` as `{slot}` (game: {ctx.game or 'unknown'})."
+            )
+        elif ctx._failure_event.is_set():
+            reason = ctx._failure_reason or "Unknown error."
+            await interaction.followup.send(
+                f"❌ Failed to connect to `{server}` as `{slot}`.\n> {reason}"
+            )
+        elif ctx.exit_event.is_set():
+            await interaction.followup.send(
+                f"❌ Connection to `{server}` as `{slot}` was aborted."
+            )
+        else:
+            await interaction.followup.send(
+                f"⏳ Still connecting to `{server}` as `{slot}` — no response within {_CONNECT_TIMEOUT:.0f} s. "
+                "Events will be posted here if the connection succeeds later."
+            )
 
     @tree.command(name="disconnect", description="Disconnect from the current Archipelago session.")
     async def disconnect_cmd(interaction: discord.Interaction) -> None:
