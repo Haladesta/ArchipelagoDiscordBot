@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
 from pathlib import Path
@@ -52,6 +53,34 @@ def item_flag_tag(flags: int) -> str:
     return ""
 
 
+# ---------------------------------------------------------------------------
+# Ping mappings  (slot name -> set of Discord user IDs)
+# ---------------------------------------------------------------------------
+
+_ping_mappings: dict[str, set[int]] = {}
+_PING_MAPPINGS_FILE = SCRIPT_DIR / "ping_mappings.json"
+
+
+def _load_ping_mappings() -> None:
+    global _ping_mappings
+    if not _PING_MAPPINGS_FILE.exists():
+        return
+    try:
+        data: dict[str, list[int]] = json.loads(_PING_MAPPINGS_FILE.read_text(encoding="utf-8"))
+        _ping_mappings = {name: set(ids) for name, ids in data.items()}
+        logger.info(f"Loaded ping mappings for {len(_ping_mappings)} slot(s).")
+    except Exception as exc:
+        logger.error(f"Failed to load ping mappings: {exc}")
+
+
+def _save_ping_mappings() -> None:
+    try:
+        data = {name: list(ids) for name, ids in _ping_mappings.items() if ids}
+        _PING_MAPPINGS_FILE.write_text(json.dumps(data, indent=2), encoding="utf-8")
+    except Exception as exc:
+        logger.error(f"Failed to save ping mappings: {exc}")
+
+
 class UnlockPrinterContext(CommonContext):
     tags = CommonContext.tags | {"TextOnly"}
     game = ""
@@ -63,7 +92,8 @@ class UnlockPrinterContext(CommonContext):
         server_address: str,
         slot_name: str,
         password: str | None,
-        notify_callback: Callable[[str], Coroutine[Any, Any, None]] | None = None,
+        # second arg is the receiving slot's display name (for ping resolution)
+        notify_callback: Callable[[str, str], Coroutine[Any, Any, None]] | None = None,
     ) -> None:
         super().__init__(server_address=server_address, password=password)
         self.auth = slot_name
@@ -111,6 +141,7 @@ class UnlockPrinterContext(CommonContext):
 
         sender_name = self.player_names.get(network_item.player, f"Slot {network_item.player}")
         receiver_name = self.player_names.get(receiving, f"Slot {receiving}")
+        actual_receiver_name = receiver_name  # keep unmodified for ping lookup
         item_name = self.lookup_item_name(network_item.item, receiving)
         location_name = self.lookup_location_name(network_item.location, network_item.player)
         tag = item_flag_tag(network_item.flags)
@@ -126,7 +157,7 @@ class UnlockPrinterContext(CommonContext):
         logger.info(message)
 
         if self._notify_callback is not None:
-            asyncio.create_task(self._notify_callback(message))
+            asyncio.create_task(self._notify_callback(message, actual_receiver_name))
 
     def lookup_item_name(self, item_id: int, receiving_slot: int) -> str:
         try:
@@ -240,9 +271,12 @@ def main() -> None:
 
         channel = interaction.channel
 
-        async def notify(message: str) -> None:
+        async def notify(message: str, receiver_slot_name: str) -> None:
+            user_ids = _ping_mappings.get(receiver_slot_name, set())
+            mentions = " ".join(f"<@{uid}>" for uid in user_ids)
+            full_message = f"{message} ({mentions})" if mentions else message
             try:
-                await channel.send(message)
+                await channel.send(full_message)
             except discord.Forbidden:
                 logger.error(f"Missing permissions to send to channel {channel.id}.")
             except Exception as exc:
@@ -299,6 +333,37 @@ def main() -> None:
         await interaction.response.defer()
         await _disconnect_current()
         await interaction.followup.send("Disconnected from Archipelago.")
+
+    @tree.command(name="subscribe", description="Ping me whenever a certain slot receives an item.")
+    @app_commands.describe(slot_name="Archipelago slot/player name to watch.")
+    async def subscribe_cmd(interaction: discord.Interaction, slot_name: str) -> None:
+        _ping_mappings.setdefault(slot_name, set()).add(interaction.user.id)
+        _save_ping_mappings()
+        await interaction.response.send_message(
+            f"✅ You will be pinged for items received by **{slot_name}**.", ephemeral=True
+        )
+
+    @tree.command(name="unsubscribe", description="Stop being pinged for a slot (or all slots).")
+    @app_commands.describe(slot_name="Slot to unsubscribe from. Leave blank to remove all your subscriptions.")
+    async def unsubscribe_cmd(interaction: discord.Interaction, slot_name: str | None = None) -> None:
+        removed: list[str] = []
+        targets = [slot_name] if slot_name else list(_ping_mappings.keys())
+        for name in targets:
+            if interaction.user.id in _ping_mappings.get(name, set()):
+                _ping_mappings[name].discard(interaction.user.id)
+                if not _ping_mappings[name]:
+                    del _ping_mappings[name]
+                removed.append(name)
+        if removed:
+            _save_ping_mappings()
+            slots_str = ", ".join(f"**{n}**" for n in removed)
+            await interaction.response.send_message(
+                f"✅ Removed your ping subscription(s) for: {slots_str}.", ephemeral=True
+            )
+        else:
+            await interaction.response.send_message("You had no matching subscriptions.", ephemeral=True)
+
+    _load_ping_mappings()
 
     try:
         client.run(token)
