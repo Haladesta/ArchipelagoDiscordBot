@@ -256,8 +256,8 @@ def main() -> None:
 
         logger.info(f"Connecting to {server} as {slot} (channel {channel.id})")
 
-        # Wait up to 15 s for a successful login, an explicit failure, or an early exit.
-        _CONNECT_TIMEOUT = 15.0
+        # Wait a few seconds for a successful login, an explicit failure, or an early exit.
+        _CONNECT_TIMEOUT = 10.0
         connected_fut = asyncio.ensure_future(ctx._connected_event.wait())
         failure_fut = asyncio.ensure_future(ctx._failure_event.wait())
         exit_fut = asyncio.ensure_future(ctx.exit_event.wait())
