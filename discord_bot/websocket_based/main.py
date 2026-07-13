@@ -149,10 +149,10 @@ class UnlockPrinterContext(CommonContext):
         if network_item.player == receiving:
             receiver_name = "themselves"
         if network_item.flags & _FLAG_TRAP:
-            message = f"""{sender_name} sent a trap "{item_name}" to {receiver_name} by checking "{location_name}"."""
+            message = f"""**{sender_name}** sent a trap `{item_name}` to **{receiver_name}** by checking `{location_name}`."""
         else:
             # removed {tag} for now
-            message = f"""{sender_name} found "{item_name}" for {receiver_name} by checking "{location_name}"."""
+            message = f"""**{sender_name}** found `{item_name}` for **{receiver_name}** by checking `{location_name}`."""
 
         logger.info(message)
 
