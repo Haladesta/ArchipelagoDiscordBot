@@ -906,7 +906,8 @@ async def server_loop(ctx: CommonContext, address: typing.Optional[str] = None) 
         await ctx.connection_closed()
         if ctx.server_address and ctx.username and not ctx.disconnected_intentionally:
             logger.info(f"... automatically reconnecting in {ctx.current_reconnect_delay} seconds")
-            assert ctx.autoreconnect_task is None
+            if ctx.autoreconnect_task is not None:
+                ctx.cancel_autoreconnect()
             ctx.autoreconnect_task = asyncio.create_task(server_autoreconnect(ctx), name="server auto reconnect")
         ctx.current_reconnect_delay *= 2
 

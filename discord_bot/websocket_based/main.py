@@ -101,7 +101,9 @@ class UnlockPrinterContext(CommonContext):
         notify_callback: Callable[[str, str], Coroutine[Any, Any, None]] | None = None,
     ) -> None:
         super().__init__(server_address=server_address, password=password)
+        self._slot_name = slot_name
         self.auth = slot_name
+        self.username = slot_name
         self._seen_unlocks: set[tuple[int, int, int, int]] = set()
         self._notify_callback = notify_callback
         self._connected_event: asyncio.Event = asyncio.Event()
@@ -121,6 +123,8 @@ class UnlockPrinterContext(CommonContext):
             self.disconnected_intentionally = True
             self.exit_event.set()
             return
+        # CommonContext.reset_server_state() clears auth; restore configured slot for reconnect logins.
+        self.auth = self._slot_name
         await self.send_connect(game="")
 
     def on_package(self, cmd: str, args: dict) -> None:
