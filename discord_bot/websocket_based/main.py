@@ -141,23 +141,25 @@ class UnlockPrinterContext(CommonContext):
 
         sender_name = self.player_names.get(network_item.player, f"Slot {network_item.player}")
         receiver_name = self.player_names.get(receiving, f"Slot {receiving}")
-        actual_receiver_name = receiver_name  # keep unmodified for ping lookup
         item_name = self.lookup_item_name(network_item.item, receiving)
         location_name = self.lookup_location_name(network_item.location, network_item.player)
         tag = item_flag_tag(network_item.flags)
 
         if network_item.player == receiving:
-            receiver_name = "themselves"
+            receiver_msg_str = "themselves"
+        else:
+            receiver_msg_str = f"**{receiver_name}**"
+            
         if network_item.flags & _FLAG_TRAP:
-            message = f"""**{sender_name}** sent a trap `{item_name}` to **{receiver_name}** by checking `{location_name}`."""
+            message = f"""**{sender_name}** sent a trap `{item_name}` to {receiver_msg_str} by checking `{location_name}`."""
         else:
             # removed {tag} for now
-            message = f"""**{sender_name}** found `{item_name}` for **{receiver_name}** by checking `{location_name}`."""
+            message = f"""**{sender_name}** found `{item_name}` for {receiver_msg_str} by checking `{location_name}`."""
 
         logger.info(message)
 
         if self._notify_callback is not None:
-            asyncio.create_task(self._notify_callback(message, actual_receiver_name))
+            asyncio.create_task(self._notify_callback(message, receiver_name))
 
     def lookup_item_name(self, item_id: int, receiving_slot: int) -> str:
         try:
