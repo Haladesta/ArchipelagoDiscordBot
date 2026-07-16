@@ -21,12 +21,17 @@ from CommonClient import CommonContext, server_loop
 from NetUtils import NetworkItem
 
 logger = logging.getLogger(__name__)
-handler = logging.StreamHandler(stream=sys.stdout)
-handler.setFormatter(
-    logging.Formatter("[{asctime}] [{levelname:<8}] {name}: {message}", "%Y-%m-%d %H:%M:%S", style="{")
-)
+_LOG_FORMAT = logging.Formatter("[{asctime}] [{levelname:<8}] {name}: {message}", "%Y-%m-%d %H:%M:%S", style="{")
+
+_stdout_handler = logging.StreamHandler(stream=sys.stdout)
+_stdout_handler.setFormatter(_LOG_FORMAT)
+
+_file_handler = logging.FileHandler(SCRIPT_DIR / "bot.log", encoding="utf-8")
+_file_handler.setFormatter(_LOG_FORMAT)
+
 logger.setLevel(logging.INFO)
-logger.addHandler(handler)
+logger.addHandler(_stdout_handler)
+logger.addHandler(_file_handler)
 
 # Item flag bitmasks (matches BaseClasses.ItemClassification)
 _FLAG_PROGRESSION = 0b00001
@@ -149,7 +154,7 @@ class UnlockPrinterContext(CommonContext):
             receiver_msg_str = "themselves"
         else:
             receiver_msg_str = f"**{receiver_name}**"
-            
+
         if network_item.flags & _FLAG_TRAP:
             message = f"""**{sender_name}** sent a trap `{item_name}` to {receiver_msg_str} by checking `{location_name}`."""
         else:
