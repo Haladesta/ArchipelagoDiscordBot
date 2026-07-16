@@ -270,6 +270,7 @@ def main() -> None:
         password: str | None = None,
     ) -> None:
         global _active_ctx, _active_task
+        logger.info(f"Connect command invoked by {interaction.user} in channel {interaction.channel.id}.")
 
         await interaction.response.defer()
 
@@ -334,6 +335,7 @@ def main() -> None:
 
     @tree.command(name="disconnect", description="Disconnect from the current Archipelago session.")
     async def disconnect_cmd(interaction: discord.Interaction) -> None:
+        logger.info(f"Disconnect command invoked by {interaction.user} in channel {interaction.channel.id}.")
         if _active_ctx is None:
             await interaction.response.send_message("No active connection.", ephemeral=True)
             return
@@ -344,6 +346,7 @@ def main() -> None:
     @tree.command(name="subscribe", description="Ping me whenever a certain slot receives an item.")
     @app_commands.describe(slot_name="Archipelago slot/player name to watch.")
     async def subscribe_cmd(interaction: discord.Interaction, slot_name: str) -> None:
+        logger.info(f"Subscribe command invoked by {interaction.user} for slot {slot_name}.")
         _ping_mappings.setdefault(slot_name, set()).add(interaction.user.id)
         _save_ping_mappings()
         await interaction.response.send_message(
@@ -355,6 +358,7 @@ def main() -> None:
     @tree.command(name="unsubscribe", description="Stop being pinged for a slot (or all slots).")
     @app_commands.describe(slot_name="Slot to unsubscribe from. Leave blank to remove all your subscriptions.")
     async def unsubscribe_cmd(interaction: discord.Interaction, slot_name: str | None = None) -> None:
+        logger.info(f"Unsubscribe command invoked by {interaction.user} for slot {slot_name or 'ALL'}.")
         removed: list[str] = []
         targets = [slot_name] if slot_name else list(_ping_mappings.keys())
         for name in targets:
